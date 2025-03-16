@@ -78,14 +78,9 @@ window.addEventListener('DOMContentLoaded', () => {
         const email = result.user.email;
         
         // Check if user has access
-        if (email === 'dziikus@gmail.com' || email === 'czektesta@gmail.com') {
-          console.log('User authenticated successfully:', email);
-          return true;
-        } else {
-          console.log('Unauthorized access attempt:', email);
-          await auth.signOut();
-          throw new Error('Unauthorized user');
-        }
+        console.log('User authenticated successfully:', email);
+        return true;
+        
       } catch (error) {
         console.error('Authentication error:', error);
         throw error;
