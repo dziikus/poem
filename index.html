@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Dialog Learner</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics-compat.js"></script>
+  <!-- Firebase Config -->
+  <script src="firebase-config.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #f0f0f0;
+    }
+
+    #container {
+      background-color: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      width: 80%;
+      max-width: 800px;
+    }
+
+    #loginContainer {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    #dialogueSelector {
+      width: 100%;
+      padding: 10px;
+      margin: 20px 0;
+      font-size: 1.1em;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+    }
+
+    .scene-description {
+      font-style: italic;
+      color: #666;
+      margin: 10px 0;
+    }
+
+    #poemText {
+      font-size: 1.2em;
+      line-height: 1.6;
+      margin-bottom: 20px;
+      display: none; /* Hidden poem text source */
+    }
+
+    #currentSentence {
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 10px;
+      padding: 5px;
+    }
+    #userSentence {
+        margin-bottom: 15px;
+    }
+
+    #buttons {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 15px;
+      font-size: 1em;
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+        background-color: #367c39;
+    }
+    button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+    }
+    #listenButton{
+        background-color: #3498db;
+    }
+    #listenButton:hover{
+        background-color: #258cd1;
+    }
+
+    #result {
+      font-size: 1.1em;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .correct {
+        color: green;
+    }
+    .incorrect {
+        color: red;
+    }
+
+    #progress-container {
+        width: 100%;
+        background-color: #ddd;
+        border-radius: 5px;
+        margin-bottom: 15px;
+    }
+    #progress-bar {
+        height: 20px;
+        background-color: #4CAF50;
+        width: 0%;
+        border-radius: 5px;
+    }
+    #learnedPoem {
+      margin-top: 20px;
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+    }
+     #learnedPoem p {
+        margin: 5px 0;
+        line-height: 1.4;
+     }
+     .user-response {
+        font-style: italic;
+        color: #555;
+     }
+
+    /* New styles for diff display */
+    .diff-display {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 10px 0;
+        font-family: monospace;
+        white-space: pre-wrap;
+        line-height: 1.5;
+    }
+    .diff-word {
+        display: inline-block;
+        padding: 2px 4px;
+        margin: 0 2px;
+        border-radius: 3px;
+    }
+    .diff-correct {
+        background-color: #e6ffe6;
+        border: 1px solid #b3ffb3;
+    }
+    .diff-incorrect {
+        background-color: #ffe6e6;
+        border: 1px solid #ffb3b3;
+        text-decoration: line-through;
+    }
+    .diff-missing {
+        background-color: #fff3e6;
+        border: 1px solid #ffd9b3;
+    }
+
+    /* New styles for navigation */
+    .navigation {
+      display: flex;
+      gap: 10px;
+      margin: 20px 0;
+    }
+
+    .navigation select {
+      flex: 1;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+
+    .scene-info {
+      background: #f8f9fa;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      border-left: 4px solid #3498db;
+    }
+  </style>
+</head>
+<body>
+
+<div id="container">
+  <div id="loginContainer">
+    <h1>Dialog Learner</h1>
+    <button id="loginButton">Login with Google</button>
+  </div>
+
+  <div id="mainContent" style="display: none;">
+    <select id="dialogueSelector">
+      <option value="">Select a dialogue...</option>
+    </select>
+
+    <div id="progress-container">
+      <div id="progress-bar"></div>
+    </div>
+
+    <div id="currentSentence"></div>
+    <div id="userSentence"></div>
+
+    <div id="buttons">
+      <button id="startButton" disabled>Start</button>
+      <button id="listenButton" disabled>Listen</button>
+      <button id="nextButton" disabled>Next</button>
+    </div>
+
+    <div id="result"></div>
+
+    <div id="learnedPoem">
+      <h3>Learned part:</h3>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Global variables for current state
+  let currentDialogue = null;
+  let currentSentenceIndex = 0;
+  let recognition;
+  let microphoneStream = null;
+
+  // DOM Elements
+  const loginButton = document.getElementById('loginButton');
+  const mainContent = document.getElementById('mainContent');
+  const dialogueSelector = document.getElementById('dialogueSelector');
+  const currentSentenceDisplay = document.getElementById('currentSentence');
+  const userSentenceDisplay = document.getElementById('userSentence');
+  const resultDisplay = document.getElementById('result');
+  const startButton = document.getElementById('startButton');
+  const listenButton = document.getElementById('listenButton');
+  const nextButton = document.getElementById('nextButton');
+  const progressBar = document.getElementById('progress-bar');
+  const learnedPoemDiv = document.getElementById('learnedPoem');
+
+  // Login handling
+  loginButton.addEventListener('click', async () => {
+    try {
+      await window.firebaseHelper.authenticateUser();
+      loginButton.style.display = 'none';
+      mainContent.style.display = 'block';
+      loadDialogues();
+    } catch (error) {
+      alert('Authentication failed: ' + error.message);
+    }
+  });
+
+  // Load dialogues into selector
+  async function loadDialogues() {
+    try {
+      const dialogues = await window.firebaseHelper.fetchDialogues();
+      dialogueSelector.innerHTML = '<option value="">Select a dialogue...</option>';
+      dialogues.forEach(dialogue => {
+        const option = document.createElement('option');
+        option.value = dialogue.id;
+        option.textContent = dialogue.name;
+        dialogueSelector.appendChild(option);
+      });
+    } catch (error) {
+      console.error('Error loading dialogues:', error);
+    }
+  }
+
+  // Dialogue selection handler
+  dialogueSelector.addEventListener('change', async () => {
+    const dialogueId = dialogueSelector.value;
+    if (dialogueId) {
+      try {
+        const dialogues = await window.firebaseHelper.fetchDialogues();
+        currentDialogue = dialogues.find(d => d.id === dialogueId);
+        if (currentDialogue) {
+          startButton.disabled = false;
+          resetLearningState();
+        }
+      } catch (error) {
+        console.error('Error loading dialogue:', error);
+      }
+    } else {
+      startButton.disabled = true;
+    }
+  });
+
+  function resetLearningState() {
+    currentSentenceIndex = 0;
+    learnedPoemDiv.innerHTML = '<h3>Learned part:</h3>';
+    resultDisplay.textContent = '';
+    userSentenceDisplay.textContent = '';
+    currentSentenceDisplay.textContent = '';
+    updateProgress();
+  }
+
+  // Check for stored microphone permission
+  async function checkMicrophonePermission() {
+    try {
+      // First check if we already have permission
+      const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+      
+      if (permissionStatus.state === 'granted') {
+        // We have permission, get the stream
+        microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        return true;
+      } else if (permissionStatus.state === 'prompt') {
+        // Need to request permission
+        microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        return true;
+      }
+      
+      return false;
+    } catch (err) {
+      console.error('Microphone permission denied:', err);
+      return false;
+    }
+  }
+
+  // Initialize speech recognition
+  function initializeSpeechRecognition() {
+    if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
+      resultDisplay.textContent = 'Web Speech API is not supported in this browser.';
+      listenButton.disabled = true;
+      return false;
+    }
+
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'pl-PL';  // Force Polish
+    recognition.interimResults = false;
+    recognition.continuous = false;
+
+    // Increase timeouts
+    recognition.maxSpeechTime = 8000;
+    recognition.speechEndThreshold = 1500;
+
+    recognition.onstart = () => {
+      // Ensure we have a fresh stream when starting recognition
+      if (!microphoneStream || microphoneStream.active === false) {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(stream => {
+            microphoneStream = stream;
+          })
+          .catch(err => {
+            console.error('Failed to get microphone stream:', err);
+          });
+      }
+    };
+
+    recognition.onresult = (event) => {
+      const userSpokenSentence = event.results[0][0].transcript;
+      userSentenceDisplay.textContent = `You said: ${userSpokenSentence}`;
+      compareSentences(userSpokenSentence);
+    };
+
+    recognition.onspeechend = () => {
+      setTimeout(() => {
+        recognition.stop();
+        listenButton.disabled = false;
+        listenButton.textContent = "Listen";
+      }, 1000);
+    };
+
+    recognition.onerror = (event) => {
+      resultDisplay.textContent = 'Error occurred in recognition: ' + event.error;
+      resultDisplay.classList.remove("correct");
+      resultDisplay.classList.add("incorrect");
+      listenButton.disabled = false;
+      
+      // Try to recover the stream if there was an error
+      if (!microphoneStream || microphoneStream.active === false) {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(stream => {
+            microphoneStream = stream;
+          })
+          .catch(err => {
+            console.error('Failed to recover microphone stream:', err);
+          });
+      }
+    };
+
+    return true;
+  }
+
+  function speakSentence(text) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'pl-PL'; // Force Polish language
+    
+    // Optimize speech parameters
+    utterance.rate = 0.9;  // Slightly slower for better pronunciation
+    utterance.pitch = 1.0; // Natural pitch
+    utterance.volume = 1.0; // Full volume
+    
+    // Try to find the best Polish voice
+    const voices = speechSynthesis.getVoices();
+    
+    // First try to find a premium/enhanced Polish voice
+    let polishVoice = voices.find(voice => 
+      voice.lang.includes('pl') && 
+      (voice.name.includes('Enhanced') || voice.name.includes('Premium') || voice.name.includes('Zosia'))
+    );
+    
+    // If no premium voice, try to find any Polish female voice
+    if (!polishVoice) {
+      polishVoice = voices.find(voice => 
+        voice.lang.includes('pl') && 
+        (voice.name.includes('female') || voice.name.includes('Zosia') || voice.name.includes('Ewa'))
+      );
+    }
+    
+    // If still no voice, try any Polish voice
+    if (!polishVoice) {
+      polishVoice = voices.find(voice => voice.lang.includes('pl'));
+    }
+    
+    if (polishVoice) {
+      console.log('Using Polish voice:', polishVoice.name);
+      utterance.voice = polishVoice;
+    } else {
+      console.warn('No Polish voice found, using default voice with Polish language settings');
+      // Try to make the default voice sound better for Polish
+      utterance.rate = 0.85; // Even slower for non-Polish voice
+    }
+    
+    // Pre-process text to improve pronunciation
+    text = text
+      .replace(/([.,!?])(\w)/g, '$1 $2') // Add space after punctuation
+      .replace(/\s+/g, ' ')              // Normalize spaces
+      .trim();
+    
+    utterance.text = text;
+    
+    // Auto-activate microphone after speaking
+    utterance.onend = () => {
+      if (!nextButton.disabled) { // Only activate mic if we're not moving to next sentence
+        listenButton.disabled = true;
+        listenButton.textContent = "Listening...";
+        recognition.start();
+      }
+    };
+
+    // Cancel any ongoing speech before starting new one
+    speechSynthesis.cancel();
+    
+    // Speak with slight delay to ensure proper start
+    setTimeout(() => {
+      speechSynthesis.speak(utterance);
+    }, 100);
+    
+    return utterance;
+  }
+
+  function normalizeText(text) {
+    return text
+      .toLowerCase()
+      .trim()
+      .replace(/[.,!?;:()—-]/g, '') // Remove all punctuation
+      .replace(/\s+/g, ' ') // Normalize spaces
+      // Preserve Polish characters during normalization
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, ''); // Remove combining diacritical marks if any
+  }
+
+  function compareWords(word1, word2) {
+    // Convert both words to the same case and normalize spaces
+    word1 = word1.toLowerCase().trim();
+    word2 = word2.toLowerCase().trim();
+    
+    // Exact match first (with diacritics)
+    if (word1 === word2) return true;
+    
+    const norm1 = normalizeText(word1);
+    const norm2 = normalizeText(word2);
+    
+    // Match after normalization
+    if (norm1 === norm2) return true;
+    
+    // Levenshtein distance for fuzzy matching
+    const maxDistance = Math.max(Math.floor(norm1.length * 0.3), 2); // Allow more errors for longer words
+    let distance = 0;
+    
+    // Simple Levenshtein distance calculation
+    const matrix = [];
+    for (let i = 0; i <= norm1.length; i++) {
+        matrix[i] = [i];
+    }
+    for (let j = 0; j <= norm2.length; j++) {
+        matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= norm1.length; i++) {
+        for (let j = 1; j <= norm2.length; j++) {
+            if (norm1[i-1] === norm2[j-1]) {
+                matrix[i][j] = matrix[i-1][j-1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i-1][j-1] + 1,
+                    matrix[i][j-1] + 1,
+                    matrix[i-1][j] + 1
+                );
+            }
+        }
+    }
+    
+    distance = matrix[norm1.length][norm2.length];
+    return distance <= maxDistance;
+  }
+
+  function compareSentences(userSpokenSentence) {
+    const originalLine = currentDialogue.sequence[currentSentenceIndex + 1];
+    if (!originalLine || !originalLine.speaker.includes("Pani Wanda")) {
+      return;
+    }
+
+    // Create diff display
+    const diffDisplay = document.createElement('div');
+    diffDisplay.classList.add('diff-display');
+    
+    // Split sentences into words and normalize
+    const originalWords = originalLine.sentence.split(/\s+/).filter(w => w.length > 0);
+    const userWords = userSpokenSentence.split(/\s+/).filter(w => w.length > 0);
+    
+    let diffHtml = '<strong>Comparison:</strong><br>';
+    
+    // Track matched words to prevent double-matching
+    const matchedOriginal = new Set();
+    const matchedUser = new Set();
+    
+    // First pass - find exact and close matches
+    for (let i = 0; i < userWords.length; i++) {
+        let bestMatch = -1;
+        
+        // Look for the best match in original words
+        for (let j = 0; j < originalWords.length; j++) {
+            if (!matchedOriginal.has(j) && compareWords(userWords[i], originalWords[j])) {
+                bestMatch = j;
+                break;
+            }
+        }
+        
+        if (bestMatch !== -1) {
+            matchedUser.add(i);
+            matchedOriginal.add(bestMatch);
+        }
+    }
+    
+    // Output words with their status
+    for (let i = 0; i < Math.max(originalWords.length, userWords.length); i++) {
+        if (i < userWords.length) {
+            const isMatched = matchedUser.has(i);
+            diffHtml += `<span class="diff-word ${isMatched ? 'diff-correct' : 'diff-incorrect'}">${userWords[i]}</span>`;
+        }
+        
+        if (i < originalWords.length && !matchedOriginal.has(i)) {
+            diffHtml += `<span class="diff-word diff-missing">${originalWords[i]}</span>`;
+        }
+    }
+    
+    diffDisplay.innerHTML = diffHtml;
+    resultDisplay.innerHTML = ''; // Clear previous result
+    resultDisplay.appendChild(diffDisplay);
+    
+    // Consider it correct if most words match (80% threshold)
+    const matchedCount = matchedUser.size;
+    const totalWords = Math.max(originalWords.length, userWords.length);
+    const accuracy = matchedCount / totalWords;
+    
+    if (accuracy >= 0.8) {
+        const correctMsg = document.createElement('div');
+        correctMsg.textContent = "Good enough! (" + Math.round(accuracy * 100) + "% correct)";
+        correctMsg.classList.add("correct");
+        resultDisplay.appendChild(correctMsg);
+        
+        // Add both sentences to learned poem when correct
+        const learnedPair = document.createElement('div');
+        learnedPair.innerHTML = `<p>${currentDialogue.sequence[currentSentenceIndex].speaker}: ${currentDialogue.sequence[currentSentenceIndex].sentence}</p>
+                                <p>${currentDialogue.sequence[currentSentenceIndex + 1].speaker}: ${currentDialogue.sequence[currentSentenceIndex + 1].sentence}</p>`;
+        learnedPoemDiv.appendChild(learnedPair);
+        
+        // Move to next pair
+        setTimeout(() => {
+            currentSentenceIndex += 2;
+            if (currentSentenceIndex < currentDialogue.sequence.length - 1) {
+                displayNextSentencePair();
+            } else {
+                currentSentenceDisplay.textContent = "Dialog finished!";
+                listenButton.disabled = true;
+                nextButton.disabled = true;
+            }
+            updateProgress();
+        }, 1000);
+    } else {
+        const incorrectMsg = document.createElement('div');
+        incorrectMsg.textContent = "Niedobre gamoniu, powinno być:";
+        incorrectMsg.classList.add("incorrect");
+        resultDisplay.appendChild(incorrectMsg);
+
+        // Show and speak the correct version
+        const speakCorrect = speakSentence(originalLine.sentence);
+        speakCorrect.onend = () => {
+            // Auto-start listening after speaking the correct version
+            listenButton.disabled = true;
+            listenButton.textContent = "Listening...";
+            recognition.start();
+        }
+    }
+    updateProgress();
+  }
+
+  function displayNextSentencePair() {
+    if (!currentDialogue || !currentDialogue.sequence || currentSentenceIndex >= currentDialogue.sequence.length - 1) {
+      currentSentenceDisplay.textContent = "Dialog finished!";
+      listenButton.disabled = true;
+      nextButton.disabled = true;
+      return;
+    }
+
+    resultDisplay.textContent = "";
+    resultDisplay.classList.remove("correct", "incorrect");
+    userSentenceDisplay.textContent = "";
+    nextButton.disabled = true;
+    
+    const currentLine = currentDialogue.sequence[currentSentenceIndex];
+    const nextLine = currentDialogue.sequence[currentSentenceIndex + 1];
+    
+    // Display first line with speaker
+    currentSentenceDisplay.textContent = `${currentLine.speaker}: ${currentLine.sentence}`;
+    
+    const speak = speakSentence(currentLine.sentence);
+    speak.onend = () => {
+      // After speaking first line, prompt for next line if it's Pani Wanda's
+      if (nextLine.speaker.includes("Pani Wanda")) {
+        currentSentenceDisplay.textContent = `Now say Pani Wanda's line: ${nextLine.sentence}`;
+        listenButton.disabled = true;
+        listenButton.textContent = "Listening...";
+        recognition.start();
+      } else {
+        // If next line is not Pani Wanda's, skip to next pair
+        currentSentenceIndex += 2;
+        displayNextSentencePair();
+      }
+    }
+
+    if (currentSentenceIndex >= currentDialogue.sequence.length - 2) {
+      nextButton.textContent = "Finish";
+    }
+  }
+
+  function updateProgress() {
+    if (!currentDialogue || !currentDialogue.sequence) return;
+    const progress = ((currentSentenceIndex + 2) / currentDialogue.sequence.length) * 100;
+    progressBar.style.width = `${progress}%`;
+  }
+
+  // Initialize the app
+  window.addEventListener('DOMContentLoaded', async () => {
+    // Clear the learned poem div except for the header
+    while (learnedPoemDiv.children.length > 1) {
+      learnedPoemDiv.removeChild(learnedPoemDiv.lastChild);
+    }
+
+    // Wait for voices to load
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      await new Promise(resolve => {
+        speechSynthesis.onvoiceschanged = resolve;
+        speechSynthesis.getVoices(); // Trigger voice loading
+      });
+    }
+
+    const hasPermission = await checkMicrophonePermission();
+    if (hasPermission) {
+      if (initializeSpeechRecognition()) {
+        startButton.disabled = false;
+      }
+    } else {
+      resultDisplay.textContent = 'Please allow microphone access to use this app.';
+      resultDisplay.classList.add("incorrect");
+      startButton.disabled = true;
+    }
+  });
+
+  startButton.addEventListener('click', () => {
+    startButton.disabled = true;
+    displayNextSentencePair();
+  });
+
+  listenButton.addEventListener('click', () => {
+    listenButton.disabled = true;
+    listenButton.textContent = "Listening...";
+    recognition.start();
+  });
+
+  nextButton.addEventListener('click', () => {
+    if (currentSentenceIndex < currentDialogue.sequence.length - 1) {
+      displayNextSentencePair();
+    }
+  });
+
+  // Clean up when the page is closed
+  window.addEventListener('beforeunload', () => {
+    if (microphoneStream) {
+      microphoneStream.getTracks().forEach(track => track.stop());
+    }
+  });
+</script>
+
+</body>
+</html>
