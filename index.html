@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Dialog Learner</title>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -11,179 +12,288 @@
   <!-- Firebase Config -->
   <script src="firebase-config.js"></script>
   <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
-      font-family: sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       display: flex;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
       background-color: #f0f0f0;
+      padding: 15px;
+      font-size: 18px;
     }
 
     #container {
       background-color: white;
-      padding: 30px;
-      border-radius: 10px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      width: 80%;
-      max-width: 800px;
+      padding: 25px;
+      border-radius: 15px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
     }
 
     #loginContainer {
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 30px;
+    }
+
+    #loginContainer h1 {
+      font-size: 2.5em;
+      margin-bottom: 30px;
     }
 
     #dialogueSelector {
       width: 100%;
-      padding: 10px;
+      padding: 20px;
       margin: 20px 0;
-      font-size: 1.1em;
-      border-radius: 5px;
-      border: 1px solid #ddd;
+      font-size: 1.2em;
+      border-radius: 12px;
+      border: 2px solid #ddd;
+      background-color: #fff;
+      -webkit-appearance: none;
     }
 
     .scene-description {
       font-style: italic;
       color: #666;
-      margin: 10px 0;
-    }
-
-    #poemText {
-      font-size: 1.2em;
-      line-height: 1.6;
-      margin-bottom: 20px;
-      display: none; /* Hidden poem text source */
+      margin: 15px 0;
+      font-size: 1.1em;
+      line-height: 1.5;
     }
 
     #currentSentence {
       font-weight: bold;
       color: #333;
-      margin-bottom: 10px;
-      padding: 5px;
-    }
-    #userSentence {
-        margin-bottom: 15px;
+      margin: 20px 0;
+      padding: 20px;
+      font-size: 1.4em;
+      line-height: 1.5;
+      background-color: #f8f9fa;
+      border-radius: 12px;
     }
 
     #buttons {
       display: flex;
-      gap: 10px;
-      margin-bottom: 10px;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin: 25px 0;
     }
+
     button {
-      padding: 10px 15px;
-      font-size: 1em;
+      flex: 1;
+      min-width: 120px;
+      padding: 20px 25px;
+      font-size: 1.2em;
       cursor: pointer;
       background-color: #4CAF50;
       color: white;
       border: none;
-      border-radius: 5px;
-      transition: background-color 0.3s;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+      -webkit-tap-highlight-color: transparent;
+      text-transform: uppercase;
+      font-weight: bold;
+      letter-spacing: 0.5px;
     }
-    button:hover {
-        background-color: #367c39;
+
+    @media (max-width: 768px) {
+      body {
+        font-size: 20px;
+        padding: 10px;
+      }
+
+      #container {
+        padding: 20px;
+      }
+
+      #loginContainer h1 {
+        font-size: 2.2em;
+      }
+
+      button {
+        flex: 1 0 100%;
+        padding: 25px;
+        font-size: 1.4em;
+        margin-bottom: 10px;
+        min-height: 80px;
+      }
+
+      #currentSentence {
+        font-size: 1.6em;
+        padding: 25px;
+        margin: 25px 0;
+      }
+
+      #dialogueSelector {
+        font-size: 1.4em;
+        padding: 25px;
+      }
+
+      .diff-display {
+        font-size: 1.3em;
+        padding: 25px;
+      }
+
+      #result {
+        font-size: 1.4em;
+        padding: 25px;
+      }
+
+      #learnedPoem h3 {
+        font-size: 1.6em;
+      }
+
+      #learnedPoem p {
+        font-size: 1.4em;
+        line-height: 1.7;
+      }
+
+      #progress-container {
+        height: 30px;
+      }
     }
-    button:disabled {
-        background-color: #cccccc;
-        cursor: not-allowed;
+
+    @media (min-width: 1200px) {
+      body {
+        font-size: 20px;
+      }
+
+      #container {
+        max-width: 1000px;
+      }
     }
-    #listenButton{
-        background-color: #3498db;
-    }
-    #listenButton:hover{
-        background-color: #258cd1;
+
+    @media (hover: none) {
+      button:active {
+        transform: scale(0.98);
+        opacity: 0.9;
+      }
     }
 
     #result {
-      font-size: 1.1em;
-      margin-top: 10px;
-      padding: 10px;
-      border-radius: 5px;
+      font-size: 1.2em;
+      margin: 20px 0;
+      padding: 20px;
+      border-radius: 12px;
+      background-color: #f8f9fa;
     }
+
     .correct {
-        color: green;
+      color: #2ecc71;
+      font-weight: bold;
     }
+
     .incorrect {
-        color: red;
+      color: #e74c3c;
+      font-weight: bold;
     }
 
     #progress-container {
-        width: 100%;
-        background-color: #ddd;
-        border-radius: 5px;
-        margin-bottom: 15px;
+      width: 100%;
+      background-color: #ddd;
+      border-radius: 12px;
+      margin: 20px 0;
+      overflow: hidden;
+      height: 25px;
     }
+
     #progress-bar {
-        height: 20px;
-        background-color: #4CAF50;
-        width: 0%;
-        border-radius: 5px;
+      height: 100%;
+      background-color: #4CAF50;
+      width: 0%;
+      border-radius: 12px;
+      transition: width 0.3s ease;
     }
+
     #learnedPoem {
-      margin-top: 20px;
-      border-top: 1px solid #ddd;
-      padding-top: 10px;
+      margin-top: 30px;
+      border-top: 2px solid #ddd;
+      padding-top: 25px;
     }
-     #learnedPoem p {
-        margin: 5px 0;
-        line-height: 1.4;
-     }
-     .user-response {
-        font-style: italic;
-        color: #555;
-     }
 
-    /* New styles for diff display */
+    #learnedPoem h3 {
+      font-size: 1.4em;
+      margin-bottom: 20px;
+    }
+
+    #learnedPoem p {
+      margin: 12px 0;
+      line-height: 1.6;
+      font-size: 1.2em;
+    }
+
+    .user-response {
+      font-style: italic;
+      color: #666;
+      font-size: 1.1em;
+    }
+
     .diff-display {
-        background: #f8f9fa;
-        padding: 15px;
-        border-radius: 5px;
-        margin: 10px 0;
-        font-family: monospace;
-        white-space: pre-wrap;
-        line-height: 1.5;
-    }
-    .diff-word {
-        display: inline-block;
-        padding: 2px 4px;
-        margin: 0 2px;
-        border-radius: 3px;
-    }
-    .diff-correct {
-        background-color: #e6ffe6;
-        border: 1px solid #b3ffb3;
-    }
-    .diff-incorrect {
-        background-color: #ffe6e6;
-        border: 1px solid #ffb3b3;
-        text-decoration: line-through;
-    }
-    .diff-missing {
-        background-color: #fff3e6;
-        border: 1px solid #ffd9b3;
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 12px;
+      margin: 15px 0;
+      font-family: monospace;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      font-size: 1.1em;
+      overflow-x: auto;
     }
 
-    /* New styles for navigation */
+    .diff-word {
+      display: inline-block;
+      padding: 4px 8px;
+      margin: 0 4px;
+      border-radius: 6px;
+      font-size: 1.1em;
+    }
+
+    .diff-correct {
+      background-color: #e6ffe6;
+      border: 1px solid #b3ffb3;
+    }
+
+    .diff-incorrect {
+      background-color: #ffe6e6;
+      border: 1px solid #ffb3b3;
+      text-decoration: line-through;
+    }
+
+    .diff-missing {
+      background-color: #fff3e6;
+      border: 1px solid #ffd9b3;
+    }
+
     .navigation {
       display: flex;
-      gap: 10px;
-      margin: 20px 0;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 15px 0;
     }
 
     .navigation select {
       flex: 1;
-      padding: 8px;
-      border-radius: 4px;
+      padding: 12px;
+      border-radius: 8px;
       border: 1px solid #ddd;
+      font-size: 16px;
+      -webkit-appearance: none;
     }
 
     .scene-info {
       background: #f8f9fa;
       padding: 15px;
       margin: 10px 0;
-      border-radius: 5px;
+      border-radius: 8px;
       border-left: 4px solid #3498db;
+      font-size: 0.9em;
     }
   </style>
 </head>
