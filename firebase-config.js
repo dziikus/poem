@@ -87,6 +87,33 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // Check if user is logged in
+    async function isUserLoggedIn() {
+      return new Promise((resolve) => {
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+          unsubscribe(); // Stop listening to changes
+          if (user) {
+            console.log('User is logged in:', user.email);
+            resolve(true);
+          } else {
+            console.log('No user is logged in');
+            resolve(false);
+          }
+        });
+      });
+    }
+
+    // Sign out function
+    async function signOut() {
+      try {
+        await auth.signOut();
+        console.log('User signed out successfully');
+      } catch (error) {
+        console.error('Error signing out:', error);
+        throw error;
+      }
+    }
+
     // Simplified data fetching functions
     async function fetchDialogues() {
       try {
@@ -104,6 +131,8 @@ window.addEventListener('DOMContentLoaded', () => {
     // Export functions
     window.firebaseHelper = {
       authenticateUser,
+      isUserLoggedIn,
+      signOut,
       fetchDialogues,
       populateDatabase
     };
