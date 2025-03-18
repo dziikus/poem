@@ -11,6 +11,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics-compat.js"></script>
   <!-- Firebase Config -->
   <script src="firebase-config.js"></script>
+  <script src="sample-data.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -310,6 +311,10 @@
       <option value="">Select a dialogue...</option>
     </select>
 
+    <select id="speakerSelector" style="display: none;">
+      <option value="">Select a speaker...</option>
+    </select>
+
     <div id="progress-container">
       <div id="progress-bar"></div>
     </div>
@@ -342,6 +347,7 @@
   const loginButton = document.getElementById('loginButton');
   const mainContent = document.getElementById('mainContent');
   const dialogueSelector = document.getElementById('dialogueSelector');
+  const speakerSelector = document.getElementById('speakerSelector');
   const currentSentenceDisplay = document.getElementById('currentSentence');
   const userSentenceDisplay = document.getElementById('userSentence');
   const resultDisplay = document.getElementById('result');
@@ -493,12 +499,33 @@
         const dialogues = await window.firebaseHelper.fetchDialogues();
         currentDialogue = dialogues.find(d => d.id === dialogueId);
         if (currentDialogue) {
-          startButton.disabled = false;
+          // Populate speaker selector with unique speakers from the dialogue
+          const speakers = [...new Set(currentDialogue.sequence.map(line => line.speaker))];
+          speakerSelector.innerHTML = '<option value="">Select a speaker...</option>';
+          speakers.forEach(speaker => {
+            const option = document.createElement('option');
+            option.value = speaker;
+            option.textContent = speaker;
+            speakerSelector.appendChild(option);
+          });
+          speakerSelector.style.display = 'block';
+          startButton.disabled = true;
           resetLearningState();
         }
       } catch (error) {
         console.error('Error loading dialogue:', error);
       }
+    } else {
+      speakerSelector.style.display = 'none';
+      startButton.disabled = true;
+    }
+  });
+
+  // Speaker selection handler
+  speakerSelector.addEventListener('change', () => {
+    if (speakerSelector.value) {
+      startButton.disabled = false;
+      resetLearningState();
     } else {
       startButton.disabled = true;
     }
@@ -725,7 +752,7 @@
 
   function compareSentences(userSpokenSentence) {
     const originalLine = currentDialogue.sequence[currentSentenceIndex + 1];
-    if (!originalLine || !originalLine.speaker.includes("Pani Wanda")) {
+    if (!originalLine || originalLine.speaker !== speakerSelector.value) {
       return;
     }
 
@@ -807,7 +834,7 @@
         resultDisplay.appendChild(incorrectMsg);
 
         // Show and speak the correct version
-        const speakCorrect = speakSentence("niedobrze gamoniu, " + originalLine.sentence);
+        const speakCorrect = speakSentence("niedobrze gamoniu, powinno byc: " + originalLine.sentence);
         speakCorrect.onend = () => {
             // Auto-start listening after speaking the correct version
             listenButton.disabled = true;
@@ -847,8 +874,8 @@
     
     const speak = speakSentence(currentLine.sentence);
     speak.onend = () => {
-      // After speaking first line, prompt for next line if it's Pani Wanda's
-      if (nextLine.speaker.includes("Pani Wanda")) {
+      // After speaking first line, prompt for next line if it's the selected speaker's
+      if (nextLine.speaker === speakerSelector.value) {
         currentSentenceDisplay.innerHTML = `
           <div style="font-size: 0.8em; color: #666; margin-bottom: 8px;">${nextLine.speaker}</div>
           <div style="font-weight: bold;">${nextLine.sentence}</div>
@@ -857,7 +884,7 @@
         listenButton.textContent = "Listening...";
         recognition.start();
       } else {
-        // If next line is not Pani Wanda's, skip to next pair
+        // If next line is not the selected speaker's, skip to next pair
         currentSentenceIndex += 2;
         displayNextSentencePair();
       }
@@ -887,7 +914,6 @@
 
   nextButton.addEventListener('click', () => {
     if (currentSentenceIndex < currentDialogue.sequence.length - 1) {
-      currentSentenceIndex += 2;
       displayNextSentencePair();
     }
   });
