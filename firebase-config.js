@@ -70,9 +70,6 @@ window.addEventListener('DOMContentLoaded', () => {
       });
       
       try {
-        // Sign out any existing user first
-        await auth.signOut();
-        
         // Attempt to sign in
         const result = await auth.signInWithPopup(provider);
         const email = result.user.email;

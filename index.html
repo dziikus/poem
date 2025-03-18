@@ -807,7 +807,7 @@
         resultDisplay.appendChild(incorrectMsg);
 
         // Show and speak the correct version
-        const speakCorrect = speakSentence(originalLine.sentence);
+        const speakCorrect = speakSentence("niedobrze gamoniu, " + originalLine.sentence);
         speakCorrect.onend = () => {
             // Auto-start listening after speaking the correct version
             listenButton.disabled = true;
@@ -826,7 +826,12 @@
       return;
     }
 
-    resultDisplay.textContent = "";
+    // Keep the comparison display but clear other messages
+    const diffDisplay = resultDisplay.querySelector('.diff-display');
+    resultDisplay.innerHTML = '';
+    if (diffDisplay) {
+      resultDisplay.appendChild(diffDisplay);
+    }
     resultDisplay.classList.remove("correct", "incorrect");
     userSentenceDisplay.textContent = "";
     nextButton.disabled = true;
@@ -882,6 +887,7 @@
 
   nextButton.addEventListener('click', () => {
     if (currentSentenceIndex < currentDialogue.sequence.length - 1) {
+      currentSentenceIndex += 2;
       displayNextSentencePair();
     }
   });
