@@ -343,656 +343,793 @@
   let speedSlider = null;
   let speedValue = null;
 
-  // DOM Elements
-  const loginButton = document.getElementById('loginButton');
-  const mainContent = document.getElementById('mainContent');
-  const dialogueSelector = document.getElementById('dialogueSelector');
-  const speakerSelector = document.getElementById('speakerSelector');
-  const currentSentenceDisplay = document.getElementById('currentSentence');
-  const userSentenceDisplay = document.getElementById('userSentence');
-  const resultDisplay = document.getElementById('result');
-  const startButton = document.getElementById('startButton');
-  const listenButton = document.getElementById('listenButton');
-  const nextButton = document.getElementById('nextButton');
-  const progressBar = document.getElementById('progress-bar');
+  // Dialogue Manager class
+  class DialogueManager {
+    constructor() {
+      this.currentDialogue = null;
+      this.currentSentenceIndex = 0;
+      this.selectedSpeaker = null;
+    }
 
-  // Initialize the app
-  window.addEventListener('DOMContentLoaded', async () => {
-    // Check if user is already logged in
-    try {
-      const isLoggedIn = await window.firebaseHelper.isUserLoggedIn();
-      if (isLoggedIn) {
-        loginButton.style.display = 'none';
-        mainContent.style.display = 'block';
-        loadDialogues();
+    setDialogue(dialogue) {
+      this.currentDialogue = dialogue;
+      this.currentSentenceIndex = 0;
+    }
+
+    setSpeaker(speaker) {
+      this.selectedSpeaker = speaker;
+    }
+
+    getCurrentLine() {
+      return this.currentDialogue?.sequence[this.currentSentenceIndex];
+    }
+
+    getNextLine() {
+      return this.currentDialogue?.sequence[this.currentSentenceIndex + 1];
+    }
+
+    getNextNextLine() {
+      return this.currentDialogue?.sequence[this.currentSentenceIndex + 2];
+    }
+
+    isCurrentLineFromSelectedSpeaker() {
+      const currentLine = this.getCurrentLine();
+      return currentLine?.speaker === this.selectedSpeaker;
+    }
+
+    isNextLineFromSelectedSpeaker() {
+      const nextLine = this.getNextLine();
+      return nextLine?.speaker === this.selectedSpeaker;
+    }
+
+    hasConsecutiveSpeakerLines() {
+      const nextNextLine = this.getNextNextLine();
+      return nextNextLine?.speaker === this.selectedSpeaker;
+    }
+
+    moveToNextLine() {
+      if (this.hasConsecutiveSpeakerLines()) {
+        this.currentSentenceIndex += 1;
+      } else {
+        this.currentSentenceIndex += 1;
       }
-    } catch (error) {
-      console.error('Error checking login state:', error);
     }
 
-    // Wait for voices to load
-    if (speechSynthesis.onvoiceschanged !== undefined) {
-      await new Promise(resolve => {
-        speechSynthesis.onvoiceschanged = resolve;
-        speechSynthesis.getVoices(); // Trigger voice loading
-      });
+    isDialogueFinished() {
+      return !this.currentDialogue?.sequence || 
+             this.currentSentenceIndex >= this.currentDialogue.sequence.length - 1;
     }
 
-    const hasPermission = await checkMicrophonePermission();
-    if (hasPermission) {
-      if (initializeSpeechRecognition()) {
-        startButton.disabled = false;
-      }
-    } else {
-      resultDisplay.textContent = 'Please allow microphone access to use this app.';
-      resultDisplay.classList.add("incorrect");
-      startButton.disabled = true;
-    }
-  });
-
-  // Login handling
-  loginButton.addEventListener('click', async () => {
-    try {
-      await window.firebaseHelper.authenticateUser();
-      loginButton.style.display = 'none';
-      mainContent.style.display = 'block';
-      loadDialogues();
-    } catch (error) {
-      alert('Authentication failed: ' + error.message);
-    }
-  });
-
-  // Add logout functionality
-  function addLogoutButton() {
-    const controlsContainer = document.createElement('div');
-    controlsContainer.style.display = 'flex';
-    controlsContainer.style.alignItems = 'center';
-    controlsContainer.style.gap = '20px';
-    controlsContainer.style.marginTop = '20px';
-    controlsContainer.style.paddingTop = '20px';
-    controlsContainer.style.borderTop = '1px solid #ddd';
-
-    const logoutButton = document.createElement('button');
-    logoutButton.textContent = 'Logout';
-    logoutButton.style.backgroundColor = '#e74c3c';
-    logoutButton.style.marginTop = '0';
-    logoutButton.onclick = async () => {
-      try {
-        await window.firebaseHelper.signOut();
-        loginButton.style.display = 'block';
-        mainContent.style.display = 'none';
-        resetLearningState();
-      } catch (error) {
-        console.error('Error signing out:', error);
-      }
-    };
-    controlsContainer.appendChild(logoutButton);
-
-    const speedControl = document.createElement('div');
-    speedControl.style.display = 'flex';
-    speedControl.style.alignItems = 'center';
-    speedControl.style.gap = '10px';
-    speedControl.style.flex = '1';
-    speedControl.style.justifyContent = 'flex-end';
-    speedControl.innerHTML = `
-      <label for="speedSlider" style="font-size: 0.84em; color: #666;">Speed:</label>
-      <input type="range" id="speedSlider" min="0.5" max="1.5" step="0.1" value="0.9" style="width: 100px; height: 8px; -webkit-appearance: none; background: #ddd; border-radius: 4px; outline: none;">
-      <span id="speedValue" style="font-size: 0.84em; color: #666; min-width: 45px;">0.9x</span>
-    `;
-    controlsContainer.appendChild(speedControl);
-
-    document.getElementById('container').appendChild(controlsContainer);
-
-    // Initialize speed control elements after they're created
-    speedSlider = document.getElementById('speedSlider');
-    speedValue = document.getElementById('speedValue');
-
-    // Load saved speech speed from localStorage
-    const savedSpeed = localStorage.getItem('speechSpeed');
-    if (savedSpeed) {
-      speedSlider.value = savedSpeed;
-      speedValue.textContent = `${savedSpeed}x`;
+    getProgress() {
+      if (!this.currentDialogue?.sequence) return 0;
+      return ((this.currentSentenceIndex + 2) / this.currentDialogue.sequence.length) * 100;
     }
 
-    // Add speed control event listeners
-    speedSlider.addEventListener('input', (e) => {
-      const speed = e.target.value;
-      speedValue.textContent = `${speed}x`;
-      localStorage.setItem('speechSpeed', speed);
-      // Cancel any ongoing speech to apply new speed immediately
-      speechSynthesis.cancel();
-    });
-
-    // Add touch-friendly styles for the slider
-    speedSlider.addEventListener('touchstart', () => {
-      speedSlider.style.height = '20px'; // Make it easier to touch
-    });
-
-    speedSlider.addEventListener('touchend', () => {
-      speedSlider.style.height = '8px'; // Reset height
-    });
+    reset() {
+      this.currentSentenceIndex = 0;
+    }
   }
 
-  // Load dialogues into selector
-  async function loadDialogues() {
-    try {
-      const dialogues = await window.firebaseHelper.fetchDialogues();
-      dialogueSelector.innerHTML = '<option value="">Select a dialogue...</option>';
+  // Create instance of DialogueManager
+  const dialogueManager = new DialogueManager();
+
+  // UI Manager class
+  class UIManager {
+    constructor() {
+      this.loginButton = document.getElementById('loginButton');
+      this.mainContent = document.getElementById('mainContent');
+      this.dialogueSelector = document.getElementById('dialogueSelector');
+      this.speakerSelector = document.getElementById('speakerSelector');
+      this.currentSentenceDisplay = document.getElementById('currentSentence');
+      this.userSentenceDisplay = document.getElementById('userSentence');
+      this.resultDisplay = document.getElementById('result');
+      this.startButton = document.getElementById('startButton');
+      this.listenButton = document.getElementById('listenButton');
+      this.nextButton = document.getElementById('nextButton');
+      this.progressBar = document.getElementById('progress-bar');
+    }
+
+    showLogin() {
+      this.loginButton.style.display = 'block';
+      this.mainContent.style.display = 'none';
+    }
+
+    showMainContent() {
+      this.loginButton.style.display = 'none';
+      this.mainContent.style.display = 'block';
+    }
+
+    updateProgress(progress) {
+      this.progressBar.style.width = `${progress}%`;
+    }
+
+    displaySentence(speaker, sentence) {
+      this.currentSentenceDisplay.innerHTML = `
+        <div style="font-size: 0.8em; color: #666; margin-bottom: 8px;">${speaker}</div>
+        <div style="font-weight: bold;">${sentence}</div>
+      `;
+    }
+
+    displayDialogueFinished() {
+      this.currentSentenceDisplay.textContent = "Dialog finished!";
+      this.listenButton.disabled = true;
+      this.nextButton.disabled = true;
+    }
+
+    updateListenButton(isListening) {
+      this.listenButton.disabled = isListening;
+      this.listenButton.textContent = isListening ? "Listening..." : "Listen";
+    }
+
+    updateNextButton(isEnabled) {
+      this.nextButton.disabled = !isEnabled;
+    }
+
+    updateNextButtonText(text) {
+      this.nextButton.textContent = text;
+    }
+
+    clearResult() {
+      this.resultDisplay.textContent = '';
+      this.resultDisplay.classList.remove("correct", "incorrect");
+    }
+
+    displayResult(message, isCorrect) {
+      const resultElement = document.createElement('div');
+      resultElement.textContent = message;
+      resultElement.classList.add(isCorrect ? "correct" : "incorrect");
+      this.resultDisplay.appendChild(resultElement);
+    }
+
+    displayComparison(originalWords, userWords, matchedUser, matchedOriginal) {
+      const diffDisplay = document.createElement('div');
+      diffDisplay.classList.add('diff-display');
+      
+      let diffHtml = '<strong>Comparison:</strong><br>';
+      
+      for (let i = 0; i < Math.max(originalWords.length, userWords.length); i++) {
+        if (i < userWords.length) {
+          const isMatched = matchedUser.has(i);
+          diffHtml += `<span class="diff-word ${isMatched ? 'diff-correct' : 'diff-incorrect'}">${userWords[i]}</span>`;
+        }
+        
+        if (i < originalWords.length && !matchedOriginal.has(i)) {
+          diffHtml += `<span class="diff-word diff-missing">${originalWords[i]}</span>`;
+        }
+      }
+      
+      diffDisplay.innerHTML = diffHtml;
+      this.resultDisplay.innerHTML = '';
+      this.resultDisplay.appendChild(diffDisplay);
+    }
+
+    populateDialogueSelector(dialogues) {
+      this.dialogueSelector.innerHTML = '<option value="">Select a dialogue...</option>';
       dialogues.forEach(dialogue => {
         const option = document.createElement('option');
         option.value = dialogue.id;
         option.textContent = dialogue.name;
-        dialogueSelector.appendChild(option);
+        this.dialogueSelector.appendChild(option);
       });
-      // Add logout button after successful login
-      addLogoutButton();
-    } catch (error) {
-      console.error('Error loading dialogues :', error);
+    }
+
+    populateSpeakerSelector(speakers) {
+      this.speakerSelector.innerHTML = '<option value="">Select a speaker...</option>';
+      speakers.forEach(speaker => {
+        const option = document.createElement('option');
+        option.value = speaker;
+        option.textContent = speaker;
+        this.speakerSelector.appendChild(option);
+      });
+      this.speakerSelector.style.display = 'block';
+    }
+
+    hideSpeakerSelector() {
+      this.speakerSelector.style.display = 'none';
+    }
+
+    addLogoutButton(onLogout) {
+      const controlsContainer = document.createElement('div');
+      controlsContainer.style.display = 'flex';
+      controlsContainer.style.alignItems = 'center';
+      controlsContainer.style.gap = '20px';
+      controlsContainer.style.marginTop = '20px';
+      controlsContainer.style.paddingTop = '20px';
+      controlsContainer.style.borderTop = '1px solid #ddd';
+
+      const logoutButton = document.createElement('button');
+      logoutButton.textContent = 'Logout';
+      logoutButton.style.backgroundColor = '#e74c3c';
+      logoutButton.style.marginTop = '0';
+      logoutButton.onclick = onLogout;
+      controlsContainer.appendChild(logoutButton);
+
+      document.getElementById('container').appendChild(controlsContainer);
     }
   }
 
-  // Dialogue selection handler
-  dialogueSelector.addEventListener('change', async () => {
-    const dialogueId = dialogueSelector.value;
-    if (dialogueId) {
+  // Create instance of UIManager
+  const uiManager = new UIManager();
+
+  // Speech Manager class
+  class SpeechManager {
+    constructor() {
+      this.recognition = null;
+      this.microphoneStream = null;
+      this.speedSlider = null;
+      this.speedValue = null;
+      this.onResultCallback = null;
+    }
+
+    setOnResultCallback(callback) {
+      this.onResultCallback = callback;
+    }
+
+    async checkMicrophonePermission() {
       try {
-        const dialogues = await window.firebaseHelper.fetchDialogues();
-        currentDialogue = dialogues.find(d => d.id === dialogueId);
-        if (currentDialogue) {
-          // Populate speaker selector with unique speakers from the dialogue
-          const speakers = [...new Set(currentDialogue.sequence.map(line => line.speaker))];
-          speakerSelector.innerHTML = '<option value="">Select a speaker...</option>';
-          speakers.forEach(speaker => {
-            const option = document.createElement('option');
-            option.value = speaker;
-            option.textContent = speaker;
-            speakerSelector.appendChild(option);
-          });
-          speakerSelector.style.display = 'block';
-          startButton.disabled = true;
-          resetLearningState();
+        const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+        
+        if (permissionStatus.state === 'granted' || permissionStatus.state === 'prompt') {
+          this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          return true;
         }
-      } catch (error) {
-        console.error('Error loading dialogue:', error);
+        
+        return false;
+      } catch (err) {
+        console.error('Microphone permission denied:', err);
+        return false;
       }
-    } else {
-      speakerSelector.style.display = 'none';
-      startButton.disabled = true;
     }
-  });
 
-  // Speaker selection handler
-  speakerSelector.addEventListener('change', () => {
-    if (speakerSelector.value) {
-      startButton.disabled = false;
-      resetLearningState();
-    } else {
-      startButton.disabled = true;
+    initializeSpeechRecognition() {
+      if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
+        uiManager.displayResult('Web Speech API is not supported in this browser.', false);
+        uiManager.listenButton.disabled = true;
+        return false;
+      }
+
+      this.recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      this.recognition.lang = 'pl-PL';
+      this.recognition.interimResults = false;
+      this.recognition.continuous = false;
+      this.recognition.maxSpeechTime = 10000;
+      this.recognition.speechEndThreshold = 5000;
+
+      this.setupRecognitionHandlers();
+      return true;
     }
-  });
 
-  function resetLearningState() {
-    currentSentenceIndex = 0;
-    resultDisplay.textContent = '';
-    userSentenceDisplay.textContent = '';
-    currentSentenceDisplay.textContent = '';
-    updateProgress();
-  }
+    setupRecognitionHandlers() {
+      this.recognition.onstart = () => {
+        console.log('Speech recognition started');
+        if (!this.microphoneStream || this.microphoneStream.active === false) {
+          navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+              this.microphoneStream = stream;
+            })
+            .catch(err => {
+              console.error('Failed to get microphone stream:', err);
+            });
+        }
+      };
 
-  // Check for stored microphone permission
-  async function checkMicrophonePermission() {
-    try {
-      // First check if we already have permission
-      const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+      this.recognition.onresult = (event) => {
+        console.log('Speech recognition result received');
+        const userSpokenSentence = event.results[0][0].transcript;
+        console.log('Transcribed text:', userSpokenSentence);
+        if (this.onResultCallback) {
+          this.onResultCallback(userSpokenSentence);
+        }
+      };
+
+      this.recognition.onspeechend = () => {
+        console.log('Speech recognition ended');
+        setTimeout(() => {
+          this.recognition.stop();
+          uiManager.updateListenButton(false);
+        }, 1000);
+      };
+
+      this.recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        uiManager.displayResult('Error occurred in recognition: ' + event.error, false);
+        uiManager.resultDisplay.classList.remove("correct");
+        uiManager.resultDisplay.classList.add("incorrect");
+        uiManager.updateListenButton(false);
+        
+        if (!this.microphoneStream || this.microphoneStream.active === false) {
+          navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+              this.microphoneStream = stream;
+            })
+            .catch(err => {
+              console.error('Failed to recover microphone stream:', err);
+            });
+        }
+      };
+    }
+
+    speakSentence(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'pl-PL';
       
-      if (permissionStatus.state === 'granted') {
-        // We have permission, get the stream
-        microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        return true;
-      } else if (permissionStatus.state === 'prompt') {
-        // Need to request permission
-        microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        return true;
-      }
+      const speed = this.speedSlider ? parseFloat(this.speedSlider.value) : 0.9;
+      utterance.rate = speed;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
       
-      return false;
-    } catch (err) {
-      console.error('Microphone permission denied:', err);
-      return false;
-    }
-  }
-
-  // Initialize speech recognition
-  function initializeSpeechRecognition() {
-    if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
-      resultDisplay.textContent = 'Web Speech API is not supported in this browser.';
-      listenButton.disabled = true;
-      return false;
-    }
-
-    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'pl-PL';  // Force Polish
-    recognition.interimResults = false;
-    recognition.continuous = false;
-
-    // Increase timeouts
-    recognition.maxSpeechTime = 8000;
-    recognition.speechEndThreshold = 1500;
-
-    recognition.onstart = () => {
-      // Ensure we have a fresh stream when starting recognition
-      if (!microphoneStream || microphoneStream.active === false) {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-          .then(stream => {
-            microphoneStream = stream;
-          })
-          .catch(err => {
-            console.error('Failed to get microphone stream:', err);
-          });
-      }
-    };
-
-    recognition.onresult = (event) => {
-      const userSpokenSentence = event.results[0][0].transcript;
-      compareSentences(userSpokenSentence);
-    };
-
-    recognition.onspeechend = () => {
-      setTimeout(() => {
-        recognition.stop();
-        listenButton.disabled = false;
-        listenButton.textContent = "Listen";
-      }, 1000);
-    };
-
-    recognition.onerror = (event) => {
-      resultDisplay.textContent = 'Error occurred in recognition: ' + event.error;
-      resultDisplay.classList.remove("correct");
-      resultDisplay.classList.add("incorrect");
-      listenButton.disabled = false;
-      
-      // Try to recover the stream if there was an error
-      if (!microphoneStream || microphoneStream.active === false) {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-          .then(stream => {
-            microphoneStream = stream;
-          })
-          .catch(err => {
-            console.error('Failed to recover microphone stream:', err);
-          });
-      }
-    };
-
-    return true;
-  }
-
-  function speakSentence(text) {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pl-PL'; // Force Polish language
-    
-    // Optimize speech parameters
-    const speed = speedSlider ? parseFloat(speedSlider.value) : 0.9;
-    utterance.rate = speed;  // Use current speed setting
-    utterance.pitch = 1.0; // Natural pitch
-    utterance.volume = 1.0; // Full volume
-    
-    // Try to find the best Polish voice
-    const voices = speechSynthesis.getVoices();
-    
-    // First try to find a premium/enhanced Polish voice
-    let polishVoice = voices.find(voice => 
-      voice.lang.includes('pl') && 
-      (voice.name.includes('Enhanced') || voice.name.includes('Premium') || voice.name.includes('Zosia'))
-    );
-    
-    // If no premium voice, try to find any Polish female voice
-    if (!polishVoice) {
-      polishVoice = voices.find(voice => 
+      const voices = speechSynthesis.getVoices();
+      let polishVoice = voices.find(voice => 
         voice.lang.includes('pl') && 
-        (voice.name.includes('female') || voice.name.includes('Zosia') || voice.name.includes('Ewa'))
+        (voice.name.includes('Enhanced') || voice.name.includes('Premium') || voice.name.includes('Zosia'))
       );
-    }
-    
-    // If still no voice, try any Polish voice
-    if (!polishVoice) {
-      polishVoice = voices.find(voice => voice.lang.includes('pl'));
-    }
-    
-    if (polishVoice) {
-      console.log('Using Polish voice:', polishVoice.name);
-      utterance.voice = polishVoice;
-    } else {
-      console.warn('No Polish voice found, using default voice with Polish language settings');
-      utterance.rate = speed * 0.85; // Adjust speed for non-Polish voice while maintaining user preference
-    }
-    
-    // Pre-process text to improve pronunciation
-    text = text
-      .replace(/([.,!?])(\w)/g, '$1 $2') // Add space after punctuation
-      .replace(/\s+/g, ' ')              // Normalize spaces
-      .trim();
-    
-    utterance.text = text;
-    
-    // Auto-activate microphone after speaking
-    utterance.onend = () => {
-      if (!nextButton.disabled) { // Only activate mic if we're not moving to next sentence
-        listenButton.disabled = true;
-        listenButton.textContent = "Listening...";
-        recognition.start();
+      
+      if (!polishVoice) {
+        polishVoice = voices.find(voice => 
+          voice.lang.includes('pl') && 
+          (voice.name.includes('female') || voice.name.includes('Zosia') || voice.name.includes('Ewa'))
+        );
       }
-    };
-
-    // Cancel any ongoing speech before starting new one
-    speechSynthesis.cancel();
-    
-    // Speak with slight delay to ensure proper start
-    setTimeout(() => {
-      speechSynthesis.speak(utterance);
-    }, 100);
-    
-    return utterance;
-  }
-
-  function normalizeText(text) {
-    return text
-      .toLowerCase()
-      .trim()
-      .replace(/[.,!?;:()—-„"']/g, '') // Remove all punctuation including Polish quotation marks
-      .replace(/\s+/g, ' ') // Normalize spaces
-      // Preserve Polish characters during normalization
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritical marks if any
-      .replace(/\s+/g, ' ') // Normalize spaces again after all replacements
-      .trim(); // Ensure no leading/trailing spaces
-  }
-
-  function compareWords(word1, word2) {
-    // Convert both words to the same case and normalize spaces
-    word1 = word1.toLowerCase().trim();
-    word2 = word2.toLowerCase().trim();
-    
-    // Exact match first (with diacritics)
-    if (word1 === word2) return true;
-    
-    const norm1 = normalizeText(word1);
-    const norm2 = normalizeText(word2);
-    
-    // Match after normalization
-    if (norm1 === norm2) return true;
-    
-    // Levenshtein distance for fuzzy matching
-    const maxDistance = Math.max(Math.floor(norm1.length * 0.3), 2); // Allow more errors for longer words
-    let distance = 0;
-    
-    // Simple Levenshtein distance calculation
-    const matrix = [];
-    for (let i = 0; i <= norm1.length; i++) {
-        matrix[i] = [i];
-    }
-    for (let j = 0; j <= norm2.length; j++) {
-        matrix[0][j] = j;
-    }
-    
-    for (let i = 1; i <= norm1.length; i++) {
-        for (let j = 1; j <= norm2.length; j++) {
-            if (norm1[i-1] === norm2[j-1]) {
-                matrix[i][j] = matrix[i-1][j-1];
-            } else {
-                matrix[i][j] = Math.min(
-                    matrix[i-1][j-1] + 1,
-                    matrix[i][j-1] + 1,
-                    matrix[i-1][j] + 1
-                );
-            }
+      
+      if (!polishVoice) {
+        polishVoice = voices.find(voice => voice.lang.includes('pl'));
+      }
+      
+      if (polishVoice) {
+        console.log('Using Polish voice:', polishVoice.name);
+        utterance.voice = polishVoice;
+      } else {
+        console.warn('No Polish voice found, using default voice with Polish language settings');
+        utterance.rate = speed * 0.85;
+      }
+      
+      text = text
+        .replace(/([.,!?])(\w)/g, '$1 $2')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      utterance.text = text;
+      
+      utterance.onend = () => {
+        if (!uiManager.nextButton.disabled) {
+          uiManager.updateListenButton(true);
+          uiManager.listenButton.textContent = "Listening...";
+          this.recognition.start();
         }
+      };
+
+      speechSynthesis.cancel();
+      
+      setTimeout(() => {
+        speechSynthesis.speak(utterance);
+      }, 100);
+      
+      return utterance;
     }
-    
-    distance = matrix[norm1.length][norm2.length];
-    return distance <= maxDistance;
+
+    startListening() {
+      this.recognition.start();
+    }
+
+    stopListening() {
+      this.recognition.stop();
+    }
+
+    cleanup() {
+      if (this.microphoneStream) {
+        this.microphoneStream.getTracks().forEach(track => track.stop());
+      }
+      speechSynthesis.cancel();
+    }
+
+    initializeSpeedControl() {
+      const controlsContainer = document.createElement('div');
+      controlsContainer.style.display = 'flex';
+      controlsContainer.style.alignItems = 'center';
+      controlsContainer.style.gap = '20px';
+      controlsContainer.style.marginTop = '20px';
+      controlsContainer.style.paddingTop = '20px';
+      controlsContainer.style.borderTop = '1px solid #ddd';
+
+      const speedControl = document.createElement('div');
+      speedControl.style.display = 'flex';
+      speedControl.style.alignItems = 'center';
+      speedControl.style.gap = '10px';
+      speedControl.style.flex = '1';
+      speedControl.style.justifyContent = 'flex-end';
+      speedControl.innerHTML = `
+        <label for="speedSlider" style="font-size: 0.84em; color: #666;">Speed:</label>
+        <input type="range" id="speedSlider" min="0.5" max="1.5" step="0.1" value="0.9" style="width: 100px; height: 8px; -webkit-appearance: none; background: #ddd; border-radius: 4px; outline: none;">
+        <span id="speedValue" style="font-size: 0.84em; color: #666; min-width: 45px;">0.9x</span>
+      `;
+      controlsContainer.appendChild(speedControl);
+
+      document.getElementById('container').appendChild(controlsContainer);
+
+      this.speedSlider = document.getElementById('speedSlider');
+      this.speedValue = document.getElementById('speedValue');
+
+      const savedSpeed = localStorage.getItem('speechSpeed');
+      if (savedSpeed) {
+        this.speedSlider.value = savedSpeed;
+        this.speedValue.textContent = `${savedSpeed}x`;
+      }
+
+      this.setupSpeedControlEventListeners();
+    }
+
+    setupSpeedControlEventListeners() {
+      this.speedSlider.addEventListener('input', (e) => {
+        const speed = e.target.value;
+        this.speedValue.textContent = `${speed}x`;
+        localStorage.setItem('speechSpeed', speed);
+        speechSynthesis.cancel();
+      });
+
+      this.speedSlider.addEventListener('touchstart', () => {
+        this.speedSlider.style.height = '20px';
+      });
+
+      this.speedSlider.addEventListener('touchend', () => {
+        this.speedSlider.style.height = '8px';
+      });
+    }
   }
 
-  function compareSentences(userSpokenSentence) {
-    const originalLine = currentDialogue.sequence[currentSentenceIndex + 1];
-    if (!originalLine || originalLine.speaker !== speakerSelector.value) {
-      return;
+  // Create instance of SpeechManager
+  const speechManager = new SpeechManager();
+
+  // Comparison Manager class
+  class ComparisonManager {
+    constructor() {
+      this.accuracyThreshold = 0.8;
     }
 
-    // Create diff display
-    const diffDisplay = document.createElement('div');
-    diffDisplay.classList.add('diff-display');
-    
-    // Split sentences into words and normalize
-    const originalWords = originalLine.sentence.split(/\s+/).filter(w => w.length > 0);
-    const userWords = userSpokenSentence.split(/\s+/).filter(w => w.length > 0);
-    
-    let diffHtml = '<strong>Comparison:</strong><br>';
-    
-    // Track matched words to prevent double-matching
-    const matchedOriginal = new Set();
-    const matchedUser = new Set();
-    
-    // First pass - find exact and close matches
-    for (let i = 0; i < userWords.length; i++) {
+    normalizeText(text) {
+      return text
+        .toLowerCase()
+        .trim()
+        .replace(/[.,!?;:()—-„"']/g, '')
+        .replace(/\s+/g, ' ')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    compareWords(word1, word2) {
+      word1 = word1.toLowerCase().trim();
+      word2 = word2.toLowerCase().trim();
+      
+      if (word1 === word2) return true;
+      
+      const norm1 = this.normalizeText(word1);
+      const norm2 = this.normalizeText(word2);
+      
+      if (norm1 === norm2) return true;
+      
+      const maxDistance = Math.max(Math.floor(norm1.length * 0.3), 2);
+      let distance = 0;
+      
+      const matrix = [];
+      for (let i = 0; i <= norm1.length; i++) {
+        matrix[i] = [i];
+      }
+      for (let j = 0; j <= norm2.length; j++) {
+        matrix[0][j] = j;
+      }
+      
+      for (let i = 1; i <= norm1.length; i++) {
+        for (let j = 1; j <= norm2.length; j++) {
+          if (norm1[i-1] === norm2[j-1]) {
+            matrix[i][j] = matrix[i-1][j-1];
+          } else {
+            matrix[i][j] = Math.min(
+              matrix[i-1][j-1] + 1,
+              matrix[i][j-1] + 1,
+              matrix[i-1][j] + 1
+            );
+          }
+        }
+      }
+      
+      distance = matrix[norm1.length][norm2.length];
+      return distance <= maxDistance;
+    }
+
+    compareSentences(userSpokenSentence, originalLine) {
+      if (!originalLine) {
+        console.log('No original line provided');
+        return null;
+      }
+
+      console.log('Comparing sentences:');
+      console.log('User spoken:', userSpokenSentence);
+      console.log('Original:', originalLine.sentence);
+
+      const originalWords = originalLine.sentence.split(/\s+/).filter(w => w.length > 0);
+      const userWords = userSpokenSentence.split(/\s+/).filter(w => w.length > 0);
+      
+      const matchedOriginal = new Set();
+      const matchedUser = new Set();
+      
+      // First pass - find exact and close matches
+      for (let i = 0; i < userWords.length; i++) {
         let bestMatch = -1;
         
-        // Look for the best match in original words
         for (let j = 0; j < originalWords.length; j++) {
-            if (!matchedOriginal.has(j) && compareWords(userWords[i], originalWords[j])) {
-                bestMatch = j;
-                break;
-            }
+          if (!matchedOriginal.has(j) && this.compareWords(userWords[i], originalWords[j])) {
+            bestMatch = j;
+            break;
+          }
         }
         
         if (bestMatch !== -1) {
-            matchedUser.add(i);
-            matchedOriginal.add(bestMatch);
+          matchedUser.add(i);
+          matchedOriginal.add(bestMatch);
         }
+      }
+      
+      const matchedCount = matchedUser.size;
+      const totalWords = Math.max(originalWords.length, userWords.length);
+      const accuracy = matchedCount / totalWords;
+      
+      console.log('Comparison result:', {
+        accuracy,
+        isCorrect: accuracy >= this.accuracyThreshold,
+        matchedCount,
+        totalWords
+      });
+      
+      return {
+        accuracy,
+        isCorrect: accuracy >= this.accuracyThreshold,
+        originalWords,
+        userWords,
+        matchedOriginal,
+        matchedUser
+      };
     }
-    
-    // Output words with their status
-    for (let i = 0; i < Math.max(originalWords.length, userWords.length); i++) {
-        if (i < userWords.length) {
-            const isMatched = matchedUser.has(i);
-            diffHtml += `<span class="diff-word ${isMatched ? 'diff-correct' : 'diff-incorrect'}">${userWords[i]}</span>`;
-        }
-        
-        if (i < originalWords.length && !matchedOriginal.has(i)) {
-            diffHtml += `<span class="diff-word diff-missing">${originalWords[i]}</span>`;
-        }
-    }
-    
-    diffDisplay.innerHTML = diffHtml;
-    resultDisplay.innerHTML = ''; // Clear previous result
-    resultDisplay.appendChild(diffDisplay);
-    
-    // Consider it correct if most words match (80% threshold)
-    const matchedCount = matchedUser.size;
-    const totalWords = Math.max(originalWords.length, userWords.length);
-    const accuracy = matchedCount / totalWords;
-    
-    if (accuracy >= 0.8) {
-        const correctMsg = document.createElement('div');
-        correctMsg.textContent = "Good enough! (" + Math.round(accuracy * 100) + "% correct)";
-        correctMsg.classList.add("correct");
-        resultDisplay.appendChild(correctMsg);
-        
-        // Move to next pair
-        setTimeout(() => {
-            currentSentenceIndex += 2;
-            if (currentSentenceIndex < currentDialogue.sequence.length - 1) {
-                displayNextSentencePair();
-            } else {
-                currentSentenceDisplay.textContent = "Dialog finished!";
-                listenButton.disabled = true;
-                nextButton.disabled = true;
-            }
-            updateProgress();
-        }, 1000);
-    } else {
-        const incorrectMsg = document.createElement('div');
-        incorrectMsg.textContent = "Niedobre gamoniu, powinno być:";
-        incorrectMsg.classList.add("incorrect");
-        resultDisplay.appendChild(incorrectMsg);
-
-        // Show and speak the correct version
-        const speakCorrect = speakSentence("niedobrze gamoniu, powinno byc: " + originalLine.sentence);
-        speakCorrect.onend = () => {
-            // Auto-start listening after speaking the correct version
-            listenButton.disabled = true;
-            listenButton.textContent = "Listening...";
-            recognition.start();
-        }
-    }
-    updateProgress();
   }
 
-  function displayNextSentencePair() {
-    console.log('Displaying next sentence pair');
-    console.log('Current index:', currentSentenceIndex);
-    
-    if (!currentDialogue || !currentDialogue.sequence || currentSentenceIndex >= currentDialogue.sequence.length - 1) {
-      console.log('No more sentences to display');
-      currentSentenceDisplay.textContent = "Dialog finished!";
-      listenButton.disabled = true;
-      nextButton.disabled = true;
-      return;
+  // Create instance of ComparisonManager
+  const comparisonManager = new ComparisonManager();
+
+  // App class to coordinate all managers
+  class App {
+    constructor() {
+      this.dialogueManager = new DialogueManager();
+      this.speechManager = new SpeechManager();
+      this.uiManager = new UIManager();
+      this.comparisonManager = new ComparisonManager();
+      
+      // Set up the speech recognition callback
+      this.speechManager.setOnResultCallback((text) => this.compareSentences(text));
     }
 
-    // Keep the comparison display but clear other messages
-    const diffDisplay = resultDisplay.querySelector('.diff-display');
-    resultDisplay.innerHTML = '';
-    if (diffDisplay) {
-      resultDisplay.appendChild(diffDisplay);
-    }
-    resultDisplay.classList.remove("correct", "incorrect");
-    userSentenceDisplay.textContent = "";
-    nextButton.disabled = true;
-    
-    const currentLine = currentDialogue.sequence[currentSentenceIndex];
-    const nextLine = currentDialogue.sequence[currentSentenceIndex + 1];
-    
-    console.log('Current line:', currentLine);
-    console.log('Next line:', nextLine);
-    
-    // Display speaker name and sentence separately
-    currentSentenceDisplay.innerHTML = `
-      <div style="font-size: 0.8em; color: #666; margin-bottom: 8px;">${currentLine.speaker}</div>
-      <div style="font-weight: bold;">${currentLine.sentence}</div>
-    `;
-    
-    const speak = speakSentence(currentLine.sentence);
-    speak.onend = () => {
-      console.log('Finished speaking current line');
-      // After speaking first line, prompt for next line if it's the selected speaker's
-      if (nextLine.speaker === speakerSelector.value) {
-        console.log('Next line is selected speaker, starting recognition');
-        currentSentenceDisplay.innerHTML = `
-          <div style="font-size: 0.8em; color: #666; margin-bottom: 8px;">${nextLine.speaker}</div>
-          <div style="font-weight: bold;">${nextLine.sentence}</div>
-        `;
-        listenButton.disabled = true;
-        listenButton.textContent = "Listening...";
-        recognition.start();
+    async initialize() {
+      try {
+        const isLoggedIn = await window.firebaseHelper.isUserLoggedIn();
+        if (isLoggedIn) {
+          this.uiManager.showMainContent();
+          await this.loadDialogues();
+        }
+      } catch (error) {
+        console.error('Error checking login state:', error);
+      }
+
+      if (speechSynthesis.onvoiceschanged !== undefined) {
+        await new Promise(resolve => {
+          speechSynthesis.onvoiceschanged = resolve;
+          speechSynthesis.getVoices();
+        });
+      }
+
+      const hasPermission = await this.speechManager.checkMicrophonePermission();
+      if (hasPermission) {
+        if (this.speechManager.initializeSpeechRecognition()) {
+          this.uiManager.startButton.disabled = false;
+        }
       } else {
-        console.log('Next line is not selected speaker, skipping to next pair');
-        // If next line is not the selected speaker's, skip to next pair
-        currentSentenceIndex += 2;
-        displayNextSentencePair();
+        this.uiManager.displayResult('Please allow microphone access to use this app.', false);
+        this.uiManager.startButton.disabled = true;
+      }
+
+      this.setupEventListeners();
+    }
+
+    async loadDialogues() {
+      try {
+        const dialogues = await window.firebaseHelper.fetchDialogues();
+        this.uiManager.populateDialogueSelector(dialogues);
+        this.uiManager.addLogoutButton(async () => {
+          try {
+            await window.firebaseHelper.signOut();
+            this.uiManager.showLogin();
+            this.resetLearningState();
+          } catch (error) {
+            console.error('Error signing out:', error);
+          }
+        });
+      } catch (error) {
+        console.error('Error loading dialogues:', error);
       }
     }
 
-    if (currentSentenceIndex >= currentDialogue.sequence.length - 2) {
-      nextButton.textContent = "Finish";
+    setupEventListeners() {
+      this.uiManager.startButton.addEventListener('click', () => {
+        this.uiManager.startButton.disabled = true;
+        this.displayNextSentencePair();
+      });
+
+      this.uiManager.listenButton.addEventListener('click', () => {
+        this.uiManager.updateListenButton(true);
+        this.speechManager.startListening();
+      });
+
+      this.uiManager.nextButton.addEventListener('click', this.handleNextButton.bind(this));
+      this.uiManager.nextButton.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleNextButton();
+      });
+      this.uiManager.nextButton.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleNextButton();
+      });
+      this.uiManager.nextButton.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleNextButton();
+      });
+
+      this.uiManager.dialogueSelector.addEventListener('change', async () => {
+        const dialogueId = this.uiManager.dialogueSelector.value;
+        if (dialogueId) {
+          try {
+            const dialogues = await window.firebaseHelper.fetchDialogues();
+            const dialogue = dialogues.find(d => d.id === dialogueId);
+            if (dialogue) {
+              this.dialogueManager.setDialogue(dialogue);
+              const speakers = [...new Set(dialogue.sequence.map(line => line.speaker))];
+              this.uiManager.populateSpeakerSelector(speakers);
+              this.uiManager.startButton.disabled = true;
+              this.resetLearningState();
+            }
+          } catch (error) {
+            console.error('Error loading dialogue:', error);
+          }
+        } else {
+          this.uiManager.hideSpeakerSelector();
+          this.uiManager.startButton.disabled = true;
+        }
+      });
+
+      this.uiManager.speakerSelector.addEventListener('change', () => {
+        if (this.uiManager.speakerSelector.value) {
+          this.dialogueManager.setSpeaker(this.uiManager.speakerSelector.value);
+          this.uiManager.startButton.disabled = false;
+          this.resetLearningState();
+        } else {
+          this.dialogueManager.setSpeaker(null);
+          this.uiManager.startButton.disabled = true;
+        }
+      });
+    }
+
+    resetLearningState() {
+      this.dialogueManager.reset();
+      this.uiManager.clearResult();
+      this.uiManager.userSentenceDisplay.textContent = '';
+      this.uiManager.currentSentenceDisplay.textContent = '';
+      this.uiManager.updateProgress(0);
+    }
+
+    handleNextButton() {
+      console.log('Next button handler called');
+      console.log('Current index:', this.dialogueManager.currentSentenceIndex);
+      console.log('Dialogue length:', this.dialogueManager.currentDialogue?.sequence?.length);
+      
+      this.speechManager.cleanup();
+      
+      if (this.dialogueManager.isDialogueFinished()) {
+        console.log('Reached end of dialogue');
+        this.uiManager.displayDialogueFinished();
+        return;
+      }
+      
+      this.dialogueManager.moveToNextLine();
+      console.log('New index:', this.dialogueManager.currentSentenceIndex);
+      
+      this.uiManager.updateListenButton(false);
+      this.uiManager.updateNextButton(true);
+      this.uiManager.updateProgress(this.dialogueManager.getProgress());
+      
+      this.displayNextSentencePair();
+    }
+
+    displayNextSentencePair() {
+      console.log('Displaying next sentence pair');
+      console.log('Current index:', this.dialogueManager.currentSentenceIndex);
+      
+      if (this.dialogueManager.isDialogueFinished()) {
+        console.log('No more sentences to display');
+        this.uiManager.displayDialogueFinished();
+        return;
+      }
+
+      const currentLine = this.dialogueManager.getCurrentLine();
+      console.log('Current line:', currentLine);
+      
+      // Clear previous results
+      this.uiManager.clearResult();
+      this.uiManager.userSentenceDisplay.textContent = "";
+      this.uiManager.updateNextButton(true);
+      
+      // Display the current sentence
+      this.uiManager.displaySentence(currentLine.speaker, currentLine.sentence);
+      
+      if (currentLine.speaker === this.dialogueManager.selectedSpeaker) {
+        // Case A: Current speaker - start listening
+        console.log('Current line is from selected speaker, starting with listening');
+        this.uiManager.updateListenButton(true);
+        this.speechManager.startListening();
+      } else {
+        // Case B: Not current speaker - speak and move to next
+        console.log('Current line is not from selected speaker, speaking and moving to next');
+        const speak = this.speechManager.speakSentence(currentLine.sentence);
+        speak.onend = () => {
+          this.dialogueManager.moveToNextLine();
+          this.displayNextSentencePair();
+        };
+      }
+      
+      this.uiManager.updateProgress(this.dialogueManager.getProgress());
+    }
+
+    compareSentences(userSpokenSentence) {
+      const originalLine = this.dialogueManager.getCurrentLine();
+      const comparisonResult = this.comparisonManager.compareSentences(userSpokenSentence, originalLine);
+      
+      if (!comparisonResult) return;
+
+      this.uiManager.displayComparison(
+        comparisonResult.originalWords,
+        comparisonResult.userWords,
+        comparisonResult.matchedUser,
+        comparisonResult.matchedOriginal
+      );
+      
+      if (comparisonResult.isCorrect) {
+        this.uiManager.displayResult(
+          "Good enough! (" + Math.round(comparisonResult.accuracy * 100) + "% correct)",
+          true
+        );
+        
+        setTimeout(() => {
+          this.dialogueManager.moveToNextLine();
+          this.displayNextSentencePair();
+        }, 1000);
+      } else {
+        this.uiManager.displayResult("Niedobre gamoniu, powinno być:", false);
+        const speakCorrect = this.speechManager.speakSentence("niedobrze gamoniu, powinno byc: " + originalLine.sentence);
+        speakCorrect.onend = () => {
+          this.uiManager.updateListenButton(true);
+          this.speechManager.startListening();
+        }
+      }
+      this.uiManager.updateProgress(this.dialogueManager.getProgress());
     }
   }
 
-  function updateProgress() {
-    if (!currentDialogue || !currentDialogue.sequence) return;
-    const progress = ((currentSentenceIndex + 2) / currentDialogue.sequence.length) * 100;
-    progressBar.style.width = `${progress}%`;
-  }
-
-  startButton.addEventListener('click', () => {
-    startButton.disabled = true;
-    displayNextSentencePair();
-  });
-
-  listenButton.addEventListener('click', () => {
-    listenButton.disabled = true;
-    listenButton.textContent = "Listening...";
-    recognition.start();
-  });
-
-  // Extract the next button functionality into a separate function
-  function handleNextButton() {
-    console.log('Next button handler called');
-    console.log('Current index:', currentSentenceIndex);
-    console.log('Dialogue length:', currentDialogue?.sequence?.length);
-    
-    // Cancel any ongoing speech or recognition
-    speechSynthesis.cancel();
-    if (recognition) {
-      recognition.stop();
-    }
-    
-    // Check if we've reached the end of the dialogue
-    if (currentSentenceIndex >= currentDialogue.sequence.length - 2) {
-      console.log('Reached end of dialogue');
-      currentSentenceDisplay.textContent = "Dialog finished!";
-      listenButton.disabled = true;
-      nextButton.disabled = true;
-      return;
-    }
-    
-    // Move to next sentence pair
-    currentSentenceIndex += 2;
-    console.log('New index:', currentSentenceIndex);
-    
-    // Reset UI state
-    listenButton.disabled = false;
-    listenButton.textContent = "Listen";
-    nextButton.disabled = true;
-    
-    // Update progress bar
-    updateProgress();
-    
-    // Display and speak next pair
-    displayNextSentencePair();
-  }
-
-  // Update event listeners to use the new function
-  nextButton.addEventListener('click', handleNextButton);
-
-  // Add mousedown event to work even when disabled
-  nextButton.addEventListener('mousedown', (e) => {
-    console.log('Next button mousedown');
-    e.preventDefault();
-    e.stopPropagation();
-    handleNextButton();
-  });
-
-  // Add touchstart event for mobile devices
-  nextButton.addEventListener('touchstart', (e) => {
-    console.log('Next button touchstart');
-    e.preventDefault();
-    e.stopPropagation();
-    handleNextButton();
-  });
-
-  // Add pointerdown event for better cross-device support
-  nextButton.addEventListener('pointerdown', (e) => {
-    console.log('Next button pointerdown');
-    e.preventDefault();
-    e.stopPropagation();
-    handleNextButton();
-  });
+  // Create instance of App and initialize
+  const app = new App();
+  window.addEventListener('DOMContentLoaded', () => app.initialize());
 
   // Clean up when the page is closed
   window.addEventListener('beforeunload', () => {
-    if (microphoneStream) {
-      microphoneStream.getTracks().forEach(track => track.stop());
-    }
+    app.speechManager.cleanup();
   });
 </script>
 
