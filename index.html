@@ -698,11 +698,13 @@
     return text
       .toLowerCase()
       .trim()
-      .replace(/[.,!?;:()—-]/g, '') // Remove all punctuation
+      .replace(/[.,!?;:()—-„"']/g, '') // Remove all punctuation including Polish quotation marks
       .replace(/\s+/g, ' ') // Normalize spaces
       // Preserve Polish characters during normalization
       .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, ''); // Remove combining diacritical marks if any
+      .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritical marks if any
+      .replace(/\s+/g, ' ') // Normalize spaces again after all replacements
+      .trim(); // Ensure no leading/trailing spaces
   }
 
   function compareWords(word1, word2) {
@@ -846,7 +848,11 @@
   }
 
   function displayNextSentencePair() {
+    console.log('Displaying next sentence pair');
+    console.log('Current index:', currentSentenceIndex);
+    
     if (!currentDialogue || !currentDialogue.sequence || currentSentenceIndex >= currentDialogue.sequence.length - 1) {
+      console.log('No more sentences to display');
       currentSentenceDisplay.textContent = "Dialog finished!";
       listenButton.disabled = true;
       nextButton.disabled = true;
@@ -866,6 +872,9 @@
     const currentLine = currentDialogue.sequence[currentSentenceIndex];
     const nextLine = currentDialogue.sequence[currentSentenceIndex + 1];
     
+    console.log('Current line:', currentLine);
+    console.log('Next line:', nextLine);
+    
     // Display speaker name and sentence separately
     currentSentenceDisplay.innerHTML = `
       <div style="font-size: 0.8em; color: #666; margin-bottom: 8px;">${currentLine.speaker}</div>
@@ -874,8 +883,10 @@
     
     const speak = speakSentence(currentLine.sentence);
     speak.onend = () => {
+      console.log('Finished speaking current line');
       // After speaking first line, prompt for next line if it's the selected speaker's
       if (nextLine.speaker === speakerSelector.value) {
+        console.log('Next line is selected speaker, starting recognition');
         currentSentenceDisplay.innerHTML = `
           <div style="font-size: 0.8em; color: #666; margin-bottom: 8px;">${nextLine.speaker}</div>
           <div style="font-weight: bold;">${nextLine.sentence}</div>
@@ -884,6 +895,7 @@
         listenButton.textContent = "Listening...";
         recognition.start();
       } else {
+        console.log('Next line is not selected speaker, skipping to next pair');
         // If next line is not the selected speaker's, skip to next pair
         currentSentenceIndex += 2;
         displayNextSentencePair();
@@ -912,10 +924,68 @@
     recognition.start();
   });
 
-  nextButton.addEventListener('click', () => {
-    if (currentSentenceIndex < currentDialogue.sequence.length - 1) {
-      displayNextSentencePair();
+  // Extract the next button functionality into a separate function
+  function handleNextButton() {
+    console.log('Next button handler called');
+    console.log('Current index:', currentSentenceIndex);
+    console.log('Dialogue length:', currentDialogue?.sequence?.length);
+    
+    // Cancel any ongoing speech or recognition
+    speechSynthesis.cancel();
+    if (recognition) {
+      recognition.stop();
     }
+    
+    // Check if we've reached the end of the dialogue
+    if (currentSentenceIndex >= currentDialogue.sequence.length - 2) {
+      console.log('Reached end of dialogue');
+      currentSentenceDisplay.textContent = "Dialog finished!";
+      listenButton.disabled = true;
+      nextButton.disabled = true;
+      return;
+    }
+    
+    // Move to next sentence pair
+    currentSentenceIndex += 2;
+    console.log('New index:', currentSentenceIndex);
+    
+    // Reset UI state
+    listenButton.disabled = false;
+    listenButton.textContent = "Listen";
+    nextButton.disabled = true;
+    
+    // Update progress bar
+    updateProgress();
+    
+    // Display and speak next pair
+    displayNextSentencePair();
+  }
+
+  // Update event listeners to use the new function
+  nextButton.addEventListener('click', handleNextButton);
+
+  // Add mousedown event to work even when disabled
+  nextButton.addEventListener('mousedown', (e) => {
+    console.log('Next button mousedown');
+    e.preventDefault();
+    e.stopPropagation();
+    handleNextButton();
+  });
+
+  // Add touchstart event for mobile devices
+  nextButton.addEventListener('touchstart', (e) => {
+    console.log('Next button touchstart');
+    e.preventDefault();
+    e.stopPropagation();
+    handleNextButton();
+  });
+
+  // Add pointerdown event for better cross-device support
+  nextButton.addEventListener('pointerdown', (e) => {
+    console.log('Next button pointerdown');
+    e.preventDefault();
+    e.stopPropagation();
+    handleNextButton();
   });
 
   // Clean up when the page is closed
